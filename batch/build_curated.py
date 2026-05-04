@@ -1,26 +1,27 @@
-"""Filter raw multi-year data to one product_category and write curated Parquet.
+"""Filter raw 2015 data to three target categories and write curated Parquet.
 
-Day 2 task. Default category: Electronics.
-Override:  CATEGORY=Apparel python batch/build_curated.py
+Filters 41.9M raw rows to ~8.2M rows across Wireless, Books, Apparel.
+Partitions output by category for efficient downstream reads.
 """
-import os
 from pathlib import Path
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 
-CATEGORY = os.environ.get("CATEGORY", "Electronics")
+CATEGORIES = ["Wireless", "Books", "Apparel"]
+RAW_DIR = Path("data/raw")
+CURATED_DIR = Path("data/curated")
 
 
 def main():
-    files = sorted(Path("data/raw").glob("amazon_reviews_*.snappy.parquet"))
+    files = sorted(RAW_DIR.glob("amazon_reviews_*.snappy.parquet"))
     if not files:
-        raise SystemExit("No files in data/raw/. Run scripts/download_data.py first.")
+        raise SystemExit(f"No files in {RAW_DIR}/. Run scripts/download_data.py first.")
 
-    print(f"Filtering to category: {CATEGORY}")
+    print(f"Filtering to categories: {CATEGORIES}")
     print(f"Source files: {len(files)}\n")
 
     spark = (SparkSession.builder
-             .appName(f"BuildCurated-{CATEGORY}")
+             .appName("BuildCurated-3Categories")
              .master("local[*]")
              .config("spark.driver.memory", "8g")
              .config("spark.sql.shuffle.partitions", "64")
@@ -29,14 +30,23 @@ def main():
 
     df = spark.read.parquet(*[str(f) for f in files])
 
-    cleaned = (df.filter(F.col("product_category") == CATEGORY)
+    # Cast binary string columns to actual strings (PDS schema quirk)
+    binary_cols = ["marketplace", "review_id", "product_id", "product_title",
+                   "product_category", "review_headline", "review_body"]
+    for col in binary_cols:
+        df = df.withColumn(col, F.col(col).cast("string"))
+
+    # Filter to our three target categories
+    filtered = df.filter(F.col("product_category").isin(CATEGORIES))
+
+    # Clean types and drop null/invalid rows
+    cleaned = (filtered
         .withColumn("star_rating", F.col("star_rating").cast("int"))
         .withColumn("helpful_votes", F.col("helpful_votes").cast("int"))
         .withColumn("total_votes", F.col("total_votes").cast("int"))
         .withColumn("review_date",
-                    F.to_date(F.col("review_date").cast("string"), "yyyy-MM-dd"))
-        .withColumn("verified_purchase",
-                    (F.col("verified_purchase") == "Y").cast("boolean"))
+                    F.from_unixtime(F.col("review_date").cast("long") * 86400)
+                    .cast("date"))
         .withColumn("review_headline",
                     F.coalesce(F.col("review_headline"), F.lit("")))
         .withColumn("review_body",
@@ -45,24 +55,24 @@ def main():
         .filter(F.col("product_id").isNotNull())
         .filter(F.col("star_rating").between(1, 5)))
 
+    # Force evaluation, count by category for sanity-check log
+    cleaned.cache()
     n = cleaned.count()
-    print(f"Curated row count: {n:,}")
+    print(f"Total curated rows: {n:,}\n")
 
-    if n < 100_000:
-        print(f"\nWARNING: Only {n:,} rows after filtering.")
-        print(f"  '{CATEGORY}' may be too small. Run inspect_raw.py to pick another.")
+    print("=== Per-category counts ===")
+    cleaned.groupBy("product_category").count().orderBy(F.col("count").desc()).show()
 
-    out = Path("data/curated")
-    out.mkdir(parents=True, exist_ok=True)
-
-    (cleaned
-        .withColumn("year", F.year("review_date"))
-        .write
+    # Write partitioned by category for fast downstream reads
+    CURATED_DIR.mkdir(parents=True, exist_ok=True)
+    (cleaned.write
         .mode("overwrite")
-        .partitionBy("year")
-        .parquet(str(out)))
+        .partitionBy("product_category")
+        .parquet(str(CURATED_DIR)))
 
-    print(f"\nWrote {n:,} rows to {out}/ partitioned by year.")
+    print(f"\nWrote curated dataset to {CURATED_DIR}/")
+    print("Partitioned by product_category. Downstream reads should filter on this column.")
+
     spark.stop()
 
 
