@@ -1,15 +1,21 @@
 """Download Amazon Customer Reviews from the ClickHouse public mirror.
 
 Source: https://datasets-documentation.s3.eu-west-3.amazonaws.com/amazon_reviews/
-Files are sharded by year. We grab the most recent two years (highest volume).
-Total download: roughly 5-10 GB compressed.
+Files are sharded by year (1995-2015). For local development we pull only
+the most recent year (2015 = ~42M rows, ~8.6 GB compressed) which gives
+us 8M+ rows after filtering to three product categories. The full 21-year
+corpus (~150M rows) is read directly from S3 by EMR on Day 7 — the local
+Mac never touches it.
 """
 from pathlib import Path
 import sys
 import urllib.request
 import urllib.error
 
-YEARS = [2015, 2014]
+# Local development: 2015 only. Day 7 EMR cluster reads the full corpus
+# directly from the ClickHouse mirror on S3 — see emr/ directory.
+YEARS = [2015]
+
 BASE_URL = "https://datasets-documentation.s3.eu-west-3.amazonaws.com/amazon_reviews"
 DEST_DIR = Path("data/raw")
 
