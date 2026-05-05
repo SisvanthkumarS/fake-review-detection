@@ -14,6 +14,7 @@ data/raw/*.parquet
 data/curated/*
 data/labeled/*
 data/features/*
+data/train/*
 data/test/*
 !data/**/.gitkeep
 models/*
