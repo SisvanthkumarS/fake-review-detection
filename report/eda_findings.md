@@ -2,9 +2,10 @@
 
 ## Dataset overview
 
-Our analysis is based on the 2015 calendar-year subset of the Amazon Customer
-Reviews dataset, filtered to three product categories (Wireless, Books, Apparel)
-yielding 8.2M reviews.
+Our analysis is based on an 8-month subset of the Amazon Customer Reviews
+dataset (December 2014 through August 2015 — the date range present in the
+ClickHouse public mirror's 2015 file), filtered to three product categories
+(Wireless, Books, Apparel) yielding 8.2M reviews.
 
 ## Rating distribution
 
@@ -40,7 +41,7 @@ tallest bar on the log-scale chart). The distribution follows a classic power
 law: the count of customers drops by roughly an order of magnitude for each
 additional review posted. Customers with 2 reviews number around 700K, those
 with 3 reviews around 300K, and fewer than 100K customers post more than 10
-reviews. The long tail — reviewers with 50 or more reviews in a single year —
+reviews. The long tail — reviewers with 50 or more reviews in our 8-month window —
 is small but represents a disproportionate share of all activity, and is a
 known fraud-indicator pattern.
 
@@ -58,10 +59,10 @@ ratings — a documented fraud signal.
 
 ## Review velocity over time
 
-![Reviews per day across 2015](figures/review_velocity_timeseries.png)
+![Reviews per day, Dec 2014 – Aug 2015](figures/review_velocity_timeseries.png)
 
 Daily review submission volume ranged between approximately 22,000 and 51,000
-reviews per day across the January–September 2015 window captured in the
+reviews per day across the December 2014 to August 2015 window captured in the
 dataset. The data does not show a simple upward trend; instead, volume
 oscillates with a weekly rhythm (weekday peaks, weekend troughs) around a
 relatively stable baseline of 30,000–38,000 reviews per day. The most notable
@@ -74,10 +75,10 @@ above the surrounding baseline with no comparable run-up.
 ![Top 20 most prolific reviewers](figures/top_reviewers.png)
 
 The most prolific reviewer in our sample posted approximately 1,270 reviews
-across the three categories in 2015 — roughly 3.5 reviews per day, or one
-every 7 hours on average. The second and third most prolific reviewers posted
+across the three categories during the 8-month window — roughly 5.2 reviews
+per day, or one every 4-5 hours on average. The second and third most prolific reviewers posted
 approximately 950 and 850 reviews respectively. The top-20 cutoff sits at
 around 295 reviews. While Amazon Vine reviewers (Amazon's incentivized
 program) explain part of this activity, posting rates of 3+ reviews per day
-sustained over a full year are rare among genuine independent reviewers and
-represent a known fraud-recruitment vector.
+sustained over an 8-month window are rare among genuine independent reviewers
+and represent a known fraud-recruitment vector.

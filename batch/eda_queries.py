@@ -87,7 +87,7 @@ def main():
     daily = df.groupBy("review_date").count().orderBy("review_date").toPandas()
     fig, ax = plt.subplots(figsize=(12, 5))
     ax.plot(daily["review_date"], daily["count"])
-    ax.set_title("Reviews per day across 2015")
+    ax.set_title("Reviews per day, Dec 2014 to Aug 2015")
     ax.set_xlabel("Date"); ax.set_ylabel("Reviews submitted")
     fig.autofmt_xdate()
     save_chart(fig, "review_velocity_timeseries.png")
