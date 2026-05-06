@@ -15,6 +15,8 @@ data/curated/*
 data/labeled/*
 data/features/*
 data/test/*
+data/train/*
+data/lookups/*
 !data/**/.gitkeep
 models/*
 !models/.gitkeep
