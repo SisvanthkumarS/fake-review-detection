@@ -23,7 +23,7 @@ def main():
     spark = (SparkSession.builder
              .appName("GenerateLabels")
              .master("local[*]")
-             .config("spark.driver.memory", "8g")
+             .config("spark.driver.memory", "12g")
              .config("spark.sql.shuffle.partitions", "64")
              .getOrCreate())
     spark.sparkContext.setLogLevel("WARN")
