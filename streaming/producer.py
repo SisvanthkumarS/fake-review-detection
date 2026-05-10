@@ -47,7 +47,6 @@ def main():
         spark.read.parquet(TEST_PATH)
         .filter(F.col("product_category") == "Wireless")
         .select(*COLS)
-        .limit(200)
     )
 
     # Fraudsters first so alerts fire early in demo
@@ -69,7 +68,7 @@ def main():
         producer.send(TOPIC, value=row)
         producer.flush()
         print(f"  Sent review {i+1}/{len(rows)}")
-        time.sleep(1)
+        time.sleep(0.05)
 
     print("\nAll reviews published.")
     producer.close()

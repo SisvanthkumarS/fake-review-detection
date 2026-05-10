@@ -20,7 +20,7 @@ from pyspark.sql.types import (
 from pyspark.ml import PipelineModel
 
 PROJECT_ROOT  = Path(__file__).resolve().parents[1]
-MODEL_PATH    = str(PROJECT_ROOT / "models" / "rf_v1")
+MODEL_PATH = str(PROJECT_ROOT / "models" / "rf_v1")
 KAFKA_BROKER  = "localhost:9092"
 INPUT_TOPIC   = "reviews-stream"
 LOOKUPS_PATH  = str(PROJECT_ROOT / "data" / "lookups")
@@ -117,6 +117,10 @@ def main():
     )
 
     predictions = model.transform(enriched)
+    predictions = predictions.withColumn(
+    "prediction",
+    (vector_to_array(F.col("probability")).getItem(1) >= 0.05).cast("double")
+    )
 
     # Extract fraud probability from sparse vector safely
     fraud_prob = vector_to_array(F.col("probability")).getItem(1)

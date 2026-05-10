@@ -1160,12 +1160,16 @@ elif page == "Live Stream Monitor":
         auto_refresh = st.toggle("Auto-refresh", value=True)
 
     def load_predictions() -> pd.DataFrame:
-        if not SINK_DIR.exists():
-            return pd.DataFrame()
-        parts = list(SINK_DIR.rglob("*.parquet"))
-        if not parts:
-            return pd.DataFrame()
-        return pd.read_parquet(SINK_DIR, engine="pyarrow")
+      import os
+      if not SINK_DIR.exists():
+          return pd.DataFrame()
+      parts = [f for f in SINK_DIR.rglob("*.parquet") if os.path.getsize(f) > 0]
+      if not parts:
+          return pd.DataFrame()
+      return pd.concat(
+          [pd.read_parquet(f, engine="pyarrow") for f in parts],
+          ignore_index=True
+      )
 
     df = load_predictions()
 
