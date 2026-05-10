@@ -4,7 +4,6 @@ Reads held-out test data and publishes one review per second to Kafka.
 Topic: reviews-stream
 """
 
-import json
 import time
 from pathlib import Path
 
@@ -14,8 +13,16 @@ from kafka import KafkaProducer
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 TEST_PATH    = str(PROJECT_ROOT / "data" / "test")
+TRAIN_PATH   = str(PROJECT_ROOT / "data" / "train")
 KAFKA_BROKER = "localhost:9092"
 TOPIC        = "reviews-stream"
+
+COLS = [
+    "review_id", "customer_id", "product_id",
+    "product_category", "star_rating", "helpful_votes",
+    "total_votes", "verified_purchase", "review_body",
+    "review_date", "is_likely_fraud"
+]
 
 
 def main():
@@ -28,23 +35,28 @@ def main():
     )
     spark.sparkContext.setLogLevel("WARN")
 
-    print(f"Reading test data from {TEST_PATH}...")
-    df = (
-        spark.read.parquet(TEST_PATH)
-        .select(
-            "review_id", "customer_id", "product_id",
-            "product_category", "star_rating", "helpful_votes",
-            "total_votes", "verified_purchase", "review_body",
-            "review_date", "is_likely_fraud"
-        )
-        .filter(F.col("product_category") == "Wireless")
-        .limit(5000)
+    print("Loading demo fraudsters from train...")
+    demo_fraudsters = (
+        spark.read.parquet(TRAIN_PATH)
+        .filter(F.col("customer_id") == 764356)
+        .select(*COLS)
     )
 
-    rows = df.toJSON().collect()
+    print("Loading Wireless reviews from test...")
+    real_reviews = (
+        spark.read.parquet(TEST_PATH)
+        .filter(F.col("product_category") == "Wireless")
+        .select(*COLS)
+        .limit(200)
+    )
+
+    # Fraudsters first so alerts fire early in demo
+    combined = demo_fraudsters.union(real_reviews)
+    rows = combined.toJSON().collect()
     spark.stop()
 
-    print(f"Loaded {len(rows)} reviews. Connecting to Kafka at {KAFKA_BROKER}...")
+    print(f"Loaded {len(rows)} reviews ({len(rows)-200} fraudsters + 200 real).")
+    print(f"Connecting to Kafka at {KAFKA_BROKER}...")
 
     producer = KafkaProducer(
         bootstrap_servers=KAFKA_BROKER,
