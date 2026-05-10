@@ -18,18 +18,28 @@ LOOKUP_DIR = Path("data/lookups")
 
 def build_reviewer_history(df):
     """Per-reviewer aggregates safe for use as features.
-
     Excluded (would leak labels): rolling 24h burst counts, reviewer avg-rating
     extremes-flag. Kept: total reviews, avg rating (continuous, not flagged),
-    rating stddev, % verified, days active.
+    rating stddev, % verified, days active, max reviews in any single day.
     """
-    return (df.groupBy("customer_id").agg(
-        F.count("*").alias("rh_total_reviews"),
-        F.avg("star_rating").alias("rh_avg_rating"),
-        F.stddev("star_rating").alias("rh_rating_stddev"),
-        F.avg(F.col("verified_purchase").cast("int")).alias("rh_pct_verified"),
-        F.datediff(F.max("review_date"), F.min("review_date")).alias("rh_days_active"),
-    ))
+    daily_counts = (
+        df.groupBy("customer_id", "review_date")
+        .agg(F.count("*").alias("daily_count"))
+    )
+    max_per_day = (
+        daily_counts.groupBy("customer_id")
+        .agg(F.max("daily_count").alias("rh_max_per_day"))
+    )
+    base = (
+        df.groupBy("customer_id").agg(
+            F.count("*").alias("rh_total_reviews"),
+            F.avg("star_rating").alias("rh_avg_rating"),
+            F.stddev("star_rating").alias("rh_rating_stddev"),
+            F.avg(F.col("verified_purchase").cast("int")).alias("rh_pct_verified"),
+            F.datediff(F.max("review_date"), F.min("review_date")).alias("rh_days_active"),
+        )
+    )
+    return base.join(max_per_day, on="customer_id", how="left")
 
 
 def build_product_history(df):
