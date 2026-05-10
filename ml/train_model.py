@@ -76,7 +76,7 @@ def main():
     print("\nLabel distribution:")
     df.groupBy(LABEL_COL).count().orderBy(LABEL_COL).show()
 
-    _, test_df = df.randomSplit([0.7, 0.3], seed=42)
+    train_df, test_df = df.randomSplit([0.7, 0.3], seed=42)
 
     assembler = VectorAssembler(
         inputCols=feature_cols,
@@ -106,11 +106,11 @@ def main():
 
     pipeline = Pipeline(stages=[assembler, scaler, rf])
 
-    from pyspark.ml import PipelineModel
-    print("\nLoading saved model...")
-    model = PipelineModel.load(MODEL_PATH)
+    print("\nTraining model...")
+    model = pipeline.fit(train_df)
 
     print(f"\nSaving model to: {MODEL_PATH}")
+    Path(MODEL_PATH).parent.mkdir(parents=True, exist_ok=True)
     model.write().overwrite().save(MODEL_PATH)
 
     print("\nEvaluating model...")
