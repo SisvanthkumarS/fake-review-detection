@@ -3,7 +3,10 @@ Day 5: Spark Structured Streaming Consumer
 Reads from Kafka topic reviews-stream, applies saved RF model,
 outputs predictions and windowed fraud alerts.
 Topic in:  reviews-stream
-Topic out: console (demo)
+Outputs:
+  - Console: per-review predictions (every 5s)
+  - Console: windowed fraud alerts (every 10s)
+  - Parquet: data/stream_sink/predictions/ (for Streamlit dashboard)
 """
 
 from pathlib import Path
@@ -21,6 +24,8 @@ MODEL_PATH    = str(PROJECT_ROOT / "models" / "rf_v1")
 KAFKA_BROKER  = "localhost:9092"
 INPUT_TOPIC   = "reviews-stream"
 LOOKUPS_PATH  = str(PROJECT_ROOT / "data" / "lookups")
+SINK_PATH     = str(PROJECT_ROOT / "data" / "stream_sink" / "predictions")
+CHECKPOINT_PATH = str(PROJECT_ROOT / "data" / "stream_sink" / "checkpoints" / "predictions")
 
 REVIEW_SCHEMA = StructType([
     StructField("review_id",         StringType(),  True),
@@ -92,7 +97,6 @@ def main():
         .join(F.broadcast(reviewer_lookup), on="customer_id", how="left")
         .join(F.broadcast(product_lookup),  on="product_id",  how="left")
         .fillna(0)
-        # Missing from lookup — add as placeholder
         # Text features
         .withColumn("txt_body_length",              F.length(F.col("review_body")))
         .withColumn("txt_word_count",               F.size(F.split(F.col("review_body"), " ")))
@@ -117,7 +121,7 @@ def main():
     # Extract fraud probability from sparse vector safely
     fraud_prob = vector_to_array(F.col("probability")).getItem(1)
 
-    # ── Output 1: per-review predictions ─────────────────────────────────────
+    # ── Output 1: per-review predictions to console ──────────────────────────
     review_query = (
         predictions
         .select(
@@ -135,7 +139,7 @@ def main():
         .start()
     )
 
-    # ── Output 2: windowed fraud alert aggregation ────────────────────────────
+    # ── Output 2: windowed fraud alert aggregation to console ───────────────
     alert_query = (
         predictions
         .withColumn("fraud_probability", fraud_prob)
@@ -159,9 +163,28 @@ def main():
         .start()
     )
 
+    # ── Output 3: parquet sink for Streamlit dashboard ───────────────────────
+    sink_query = (
+        predictions
+        .select(
+            "review_id", "product_id", "product_category",
+            "star_rating", "prediction",
+            fraud_prob.alias("fraud_probability"),
+            "timestamp"
+        )
+        .writeStream
+        .outputMode("append")
+        .format("parquet")
+        .option("path", SINK_PATH)
+        .option("checkpointLocation", CHECKPOINT_PATH)
+        .trigger(processingTime="5 seconds")
+        .start()
+    )
+
     print("\nStreaming started. Waiting for reviews from producer...")
     print("Per-review predictions will appear every 5 seconds.")
     print("Fraud alerts will appear when a product gets 3+ fraud flags in 10 minutes.")
+    print(f"Predictions also written to {SINK_PATH} for the dashboard.")
     print("Press Ctrl+C to stop.\n")
 
     spark.streams.awaitAnyTermination()

@@ -21,6 +21,7 @@ data/lookups/*
 models/*
 !models/.gitkeep
 streaming/output/
+data/stream_sink/
 streaming/checkpoint/
 .DS_Store
 .idea/
