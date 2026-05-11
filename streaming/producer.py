@@ -5,7 +5,7 @@ import pyarrow.parquet as pq
 from kafka import KafkaProducer
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-TRAIN_PATH   = str(PROJECT_ROOT / "data" / "train")
+INFERENCE_PATH   = str(PROJECT_ROOT / "data" / "test")
 KAFKA_BROKER = "localhost:9092"
 TOPIC        = "reviews-stream"
 
@@ -19,7 +19,7 @@ COLS = [
 
 def main():
     print("Reading data...")
-    dataset = pq.ParquetDataset(TRAIN_PATH)
+    dataset = pq.ParquetDataset(INFERENCE_PATH)
     table = dataset.read(columns=COLS)
 
     print(f"Loaded {table.num_rows:,} total rows")
