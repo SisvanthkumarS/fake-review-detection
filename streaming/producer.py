@@ -1,18 +1,10 @@
-"""
-Day 5: Kafka Producer
-Reads held-out test data and publishes one review per second to Kafka.
-Topic: reviews-stream
-"""
-
 import time
+import json
 from pathlib import Path
-
-from pyspark.sql import SparkSession
-from pyspark.sql import functions as F
+import pyarrow.parquet as pq
 from kafka import KafkaProducer
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-TEST_PATH    = str(PROJECT_ROOT / "data" / "test")
 TRAIN_PATH   = str(PROJECT_ROOT / "data" / "train")
 KAFKA_BROKER = "localhost:9092"
 TOPIC        = "reviews-stream"
@@ -26,49 +18,42 @@ COLS = [
 
 
 def main():
-    spark = (
-        SparkSession.builder
-        .appName("FakeReviewProducer")
-        .master("local[*]")
-        .config("spark.driver.memory", "4g")
-        .getOrCreate()
-    )
-    spark.sparkContext.setLogLevel("WARN")
+    print("Reading data...")
+    dataset = pq.ParquetDataset(TRAIN_PATH)
+    table = dataset.read(columns=COLS)
 
-    print("Loading demo fraudsters from train...")
-    demo_fraudsters = (
-        spark.read.parquet(TRAIN_PATH)
-        .filter(F.col("customer_id") == 764356)
-        .select(*COLS)
-    )
-
-    print("Loading Wireless reviews from test...")
-    real_reviews = (
-        spark.read.parquet(TEST_PATH)
-        .filter(F.col("product_category") == "Wireless")
-        .select(*COLS)
-    )
-
-    # Fraudsters first so alerts fire early in demo
-    combined = demo_fraudsters.union(real_reviews)
-    rows = combined.toJSON().collect()
-    spark.stop()
-
-    print(f"Loaded {len(rows)} reviews ({len(rows)-200} fraudsters + 200 real).")
-    print(f"Connecting to Kafka at {KAFKA_BROKER}...")
+    print(f"Loaded {table.num_rows:,} total rows")
+    print("Category breakdown:")
+    categories = table.column("product_category")
+    from collections import Counter
+    counts = Counter(categories.to_pylist())
+    for cat, count in counts.items():
+        print(f"  {cat}: {count:,}")
 
     producer = KafkaProducer(
         bootstrap_servers=KAFKA_BROKER,
         value_serializer=lambda v: v.encode("utf-8"),
     )
 
-    print(f"Publishing to topic '{TOPIC}' at 1 review/sec. Press Ctrl+C to stop.\n")
+    print(f"\nPublishing to '{TOPIC}'. Press Ctrl+C to stop.\n")
 
-    for i, row in enumerate(rows):
-        producer.send(TOPIC, value=row)
-        producer.flush()
-        print(f"  Sent review {i+1}/{len(rows)}")
-        time.sleep(0.05)
+    for i in range(table.num_rows):
+        try:
+            row = {col: table.column(col)[i].as_py() for col in COLS}
+            for k, v in row.items():
+                if hasattr(v, 'isoformat'):
+                    row[k] = v.isoformat()
+                elif v is None:
+                    row[k] = None
+
+            producer.send(TOPIC, value=json.dumps(row, default=str))
+            producer.flush()
+            if i % 1000 == 0:
+                print(f"  Sent {i+1:,}/{table.num_rows:,}")
+            time.sleep(0)
+        except Exception as e:
+            print(f"  Skipping row {i}: {e}")
+            continue
 
     print("\nAll reviews published.")
     producer.close()
